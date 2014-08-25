@@ -172,7 +172,6 @@ void loop() {
 	if ( status == WL_CONNECTED) {		// Uniquement si connecté
 		if (count % 40 == 0) {			// Envoie le HBEAT toutes les 10 secondes
 			xPL_hbeat();
-			count = 0;
 //		}
 //		if (Cooling_last != Cooling_now) {		// Envoie le TRIG uniquement si modification
 			xPL_Cooling(Cooling_now);			// comme le prévoie le protocole xPL
