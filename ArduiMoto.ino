@@ -1,3 +1,4 @@
+#include <Servo.h>
 #include <DHT.h>
 #include <LiquidCrystal.h>
 #include <SPI.h>
@@ -6,9 +7,11 @@
 #include <stdlib.h>
 
 // Définie le capteur DHT
-#define DHTPIN 30
+#define DHTPIN 30		// Attention, pin < 32 !
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
+
+Servo ctrlralenti;
 
 const int CoolingTemp = A0;	// Capteur TMP36
 
@@ -20,13 +23,13 @@ const int pinLCD_D5 = 10;
 const int pinLCD_D6 = 9;
 const int pinLCD_D7 = 8;
 
-char ssid[] = "WiFi**********";	//  SSID
-char pass[] = "************";	// Mot de passe (WPA)
+char ssid[] = "*****";	//  SSID
+char pass[] = "*****";	// Mot de passe (WPA)
 int status = WL_IDLE_STATUS;	// the Wifi radio's status
 
-//IPAddress ip(192, 168, 1, 200);  // FIXME : En manuel,
+//IPAddress ip(192, 168, 1, 200);  // WONTFIX : En manuel,
 //IPAddress gw(192, 168, 1, 1);    // impossible de faire
-//IPAddress ns(192, 168, 1, 3);    // du broadcast.
+//IPAddress ns(192, 168, 1, 3);    // du broadcast. Le DHCP c'est bien.
 //IPAddress mask(255, 255, 255, 0);
 IPAddress server(255, 255, 255, 255);
 
@@ -90,25 +93,53 @@ void xPL_Humidity(int humidity) {	// Envoie le pourcentage d'humidité
 	SendUdPMessage(udp_msg);
 }
 
+void xPL_dhtTemp(int temp) {
+	String msg;
+	char udp_msg[256];
+	msg = "sensor.basic\n{\ndevice=outside\ntype=temp\nunits=c\ncurrent=";
+	msg += temp;
+	msg += "\n}";
+	msg.toCharArray(udp_msg, 256);
+	SendUdPMessage(udp_msg);
+}
+
 // Fonction de l'écran LCD
 LiquidCrystal lcd(pinLCD_RS, pinLCD_Enable, pinLCD_D4, pinLCD_D5, pinLCD_D6, pinLCD_D7);
 
 // Initialise certaine variable
-int Cooling_last = -128;		// Place le dernier enregistrement à -128 car il n'y en a jamais eu. (valeur arbitraire)
-int Humidity_last = -128;
+//int Cooling_last = -128;		// Place le dernier enregistrement à -128 car il n'y en a jamais eu. (valeur arbitraire)
+//int Humidity_last = -128;
+//int temperature_dht_last = -128;
 int Cooling_now;
 int humidity_now;
-int t;
+int temperature_dht_now;
+
+//volatile float rpm_time = 0;				//  TODO + FIXME : capteur pour RPM (effet Hall bougie ?)
+//volatile float rpm_time_last = 0;	
+//int rpm;						
+//volatile int rpm_array[5] = {0,0,0,0,0};
+//
+//void rpm_calc() {
+//	rpm_time = (micros() - rpm_time_last); 
+//	rpm_time_last = micros();
+//}
+
+int affcount1 = 0;
+
+// Les LED d'état
+int WifiLED = 40;
 
 void setup()
 {
-//	Serial.begin(9600);	// Serial pour le debogage, c'est pratique
+	Serial.begin(9600);	// Serial pour le debogage, c'est pratique
 //	Mode des PIN des capteurs
 	pinMode(CoolingTemp, INPUT);
-	if (WiFi.status() == WL_NO_SHIELD) {
+	pinMode(WifiLED, OUTPUT);
+//	Wifi.status();
+//	if (WiFi.status() == WL_NO_SHIELD) {
 //		Serial.println("WiFi shield not present");
-		while(true);
-	}
+//		while(true);
+//	}
 //	WiFi.config(ip, ns, gw);
 	if ( status != WL_CONNECTED) { // Essaie de se connecter une première fois au démarrage
 		status = WiFi.begin(ssid, pass);
@@ -121,21 +152,25 @@ void setup()
 	
 	lcd.begin(16, 2); // Initialise un écran LCD 16 lignes / 2 colonnes
 	
+//	attachInterrupt(5, rpm_calc, RISING);	// Interrupt pour calcul des RPM
+	
+//	ctrlralenti.attach(2); // TODO : Servomoteur de contrôle du ralenti (variable selon la temperature, fait office de "starter")
 }
 
 void loop() {
-	if (count % 2 == 0) { // Mesure toutes les secondes la temperature
+	if (count % 4 == 0) { // Mesure toutes les secondes la temperature
 		Cooling_now = TMP36(CoolingTemp);
 	}
-	if (count % 60 ==0) { // Mesure l'humidité toutes les 30 secondes 
+	if (count % 120 == 0) { // Mesure l'humidité toutes les 30 secondes 
 		humidity_now = dht.readHumidity();
+		temperature_dht_now = dht.readTemperature();
 	}
 //	int packetSize = Udp.parsePacket();  // TODO : action xPL
 //	if(packetSize) {
 //		PacketAction(); // Exécute l'action si demandée
 //	}
 	if ( status == WL_CONNECTED) {		// Uniquement si connecté
-		if (count % 20 == 0) {			// Envoie le HBEAT toutes les 10 secondes
+		if (count % 40 == 0) {			// Envoie le HBEAT toutes les 10 secondes
 			xPL_hbeat();
 			count = 0;
 //		}
@@ -143,25 +178,61 @@ void loop() {
 			xPL_Cooling(Cooling_now);			// comme le prévoie le protocole xPL
 //			Cooling_last = Cooling_now;			// FIXME : Le test ne fonctionne pas ?
 //		}										// WORKAROUND : envoie en même temps que le heartbeat
-//		if (Humidity_last != humidity_now); {
+//		if (Humidity_last != humidity_now) {
 			xPL_Humidity(humidity_now);
 //			Humidity_last = humidity_now;
+//		}
+//		if (temperature_dht_now != temperature_dht_last) {
+			xPL_dhtTemp(temperature_dht_now);
+//			temperature_dht_last = temperature_dht_now;
 		}
 	}
-	if ((millis()-timer) >= 500) {	// Mise à jour de l'affichage LCD toutes les 1/2 secondes
-		lcd.setCursor(0, 0);		
-		lcd.print(Cooling_now);
-		lcd.setCursor(0, 1);
-		lcd.print(humidity_now);
+	if ((millis()-timer) >= 250) {	// Mise à jour de l'affichage LCD toutes les 250 ms
+		if (affcount1 < 10) {		// Alterne l'affichage toutes les 2 secondes
+			lcd.clear();
+			lcd.setCursor(0, 0);
+			lcd.print("Moteur : ");
+			lcd.print(Cooling_now);
+			lcd.print((char)223);
+			lcd.print("C");;
+		} else {
+			lcd.clear();
+			lcd.setCursor(0, 0);
+			lcd.print("Ext. : ");
+			lcd.print(temperature_dht_now);
+			lcd.print((char)223);
+			lcd.print("C");
+			lcd.setCursor(0, 1);
+			lcd.print("Hum. : ");
+			lcd.print(humidity_now);
+			lcd.print("%");
+		}
+		affcount1 = affcount1 + 1;
+		if (affcount1 > 20) {
+			affcount1 = 0;
+		}
+//		lcd.print("RPM : ");
+//		if (rpm_time > 0) {
+//			rpm_array[0] = rpm_array[1];
+//			rpm_array[1] = rpm_array[2];
+//			rpm_array[2] = rpm_array[3];
+//			rpm_array[3] = rpm_array[4];
+//			rpm_array[4] = 60*(1000000/rpm_time);
+//			rpm = (rpm_array[0] + rpm_array[1] + rpm_array[2] + rpm_array[3] + rpm_array[4]) / 5;
+//		}
+//		rpm = 60*(1000000/rpm_time);
+//		lcd.print(rpm_time);
 		timer = millis();
-		count = count + 1;	// et mise en place du compteur par unité de 500 ms
+		count = count + 1;	// et mise en place du compteur par unité de 250 ms
 	}
-	if (count % 10 == 0) {				// retente la connexion toutes les 5 secondes
+	if (count % 20 == 0) {				// retente la connexion toutes les 5 secondes
 		if ( status != WL_CONNECTED) {	// si non connecté
+			digitalWrite(WifiLED, LOW);
 			status = WiFi.begin(ssid, pass);
 		}
 	}
-	if (count == 120) {	// replace le compteur "count" à 0 aprés 120, soit 1 minute.
+	if (status == WL_CONNECTED) { digitalWrite(WifiLED, HIGH); }
+	if (count == 240) {	// replace le compteur "count" à 1 minute.
 		count = 0;
 	}
 }
