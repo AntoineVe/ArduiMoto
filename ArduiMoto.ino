@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 // Définie le capteur DHT
-#define DHTPIN 30		// Attention, pin < 32 !
+#define DHTPIN 2		// Attention, pin < 32 !
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -16,12 +16,16 @@ Servo ctrlralenti;
 const int CoolingTemp = A0;	// Capteur TMP36
 
 // Définie les pin pour l'écran LCD
-const int pinLCD_RS = 5; 
-const int pinLCD_Enable = 6;
-const int pinLCD_D4 = 11;
-const int pinLCD_D5 = 10;
-const int pinLCD_D6 = 9;
-const int pinLCD_D7 = 8;
+const int pinLCD_RS = 40; 
+const int pinLCD_Enable = 38;
+const int pinLCD_D0 = 36;
+const int pinLCD_D1 = 34;
+const int pinLCD_D2 = 32;
+const int pinLCD_D3 = 30;
+const int pinLCD_D4 = 28;
+const int pinLCD_D5 = 26;
+const int pinLCD_D6 = 24;
+const int pinLCD_D7 = 22;
 
 char ssid[] = "*****";	//  SSID
 char pass[] = "*****";	// Mot de passe (WPA)
@@ -104,7 +108,7 @@ void xPL_dhtTemp(int temp) {
 }
 
 // Fonction de l'écran LCD
-LiquidCrystal lcd(pinLCD_RS, pinLCD_Enable, pinLCD_D4, pinLCD_D5, pinLCD_D6, pinLCD_D7);
+LiquidCrystal lcd(pinLCD_RS, pinLCD_Enable, pinLCD_D0, pinLCD_D1, pinLCD_D2, pinLCD_D3, pinLCD_D4, pinLCD_D5, pinLCD_D6, pinLCD_D7);
 
 // Initialise certaine variable
 //int Cooling_last = -128;		// Place le dernier enregistrement à -128 car il n'y en a jamais eu. (valeur arbitraire)
@@ -150,7 +154,7 @@ void setup()
 		xPL_hbeat(); // Envoie le premier heartbeat xPL
 	}
 	
-	lcd.begin(16, 2); // Initialise un écran LCD 16 lignes / 2 colonnes
+	lcd.begin(20, 4); // Initialise un écran LCD 16 lignes / 2 colonnes
 	
 //	attachInterrupt(5, rpm_calc, RISING);	// Interrupt pour calcul des RPM
 	
@@ -158,10 +162,10 @@ void setup()
 }
 
 void loop() {
-	if (count % 4 == 0) { // Mesure toutes les secondes la temperature
+	if (count % 10 == 0) { // Mesure toutes les secondes la temperature
 		Cooling_now = TMP36(CoolingTemp);
 	}
-	if (count % 120 == 0) { // Mesure l'humidité toutes les 30 secondes 
+	if (count % 200 == 0) { // Mesure l'humidité toutes les 30 secondes 
 		humidity_now = dht.readHumidity();
 		temperature_dht_now = dht.readTemperature();
 	}
@@ -170,7 +174,7 @@ void loop() {
 //		PacketAction(); // Exécute l'action si demandée
 //	}
 	if ( status == WL_CONNECTED) {		// Uniquement si connecté
-		if (count % 40 == 0) {			// Envoie le HBEAT toutes les 10 secondes
+		if (count % 100 == 0) {			// Envoie le HBEAT toutes les 10 secondes
 			xPL_hbeat();
 //		}
 //		if (Cooling_last != Cooling_now) {		// Envoie le TRIG uniquement si modification
@@ -186,16 +190,16 @@ void loop() {
 //			temperature_dht_last = temperature_dht_now;
 		}
 	}
-	if ((millis()-timer) >= 250) {	// Mise à jour de l'affichage LCD toutes les 250 ms
-		if (affcount1 < 10) {		// Alterne l'affichage toutes les 2 secondes
-			lcd.clear();
+	if (count % 10 == 0) {
+		lcd.clear();
+		if (affcount1 == 0) {		// Alterne l'affichage toutes les 2 secondes
 			lcd.setCursor(0, 0);
 			lcd.print("Moteur : ");
 			lcd.print(Cooling_now);
 			lcd.print((char)223);
 			lcd.print("C");;
+			affcount1 = 1;
 		} else {
-			lcd.clear();
 			lcd.setCursor(0, 0);
 			lcd.print("Ext. : ");
 			lcd.print(temperature_dht_now);
@@ -205,9 +209,6 @@ void loop() {
 			lcd.print("Hum. : ");
 			lcd.print(humidity_now);
 			lcd.print("%");
-		}
-		affcount1 = affcount1 + 1;
-		if (affcount1 > 20) {
 			affcount1 = 0;
 		}
 //		lcd.print("RPM : ");
@@ -222,16 +223,17 @@ void loop() {
 //		rpm = 60*(1000000/rpm_time);
 //		lcd.print(rpm_time);
 		timer = millis();
-		count = count + 1;	// et mise en place du compteur par unité de 250 ms
 	}
-	if (count % 20 == 0) {				// retente la connexion toutes les 5 secondes
+	if (count % 50 == 0) {				// retente la connexion toutes les 5 secondes
 		if ( status != WL_CONNECTED) {	// si non connecté
 			digitalWrite(WifiLED, LOW);
 			status = WiFi.begin(ssid, pass);
 		}
 	}
-	if (status == WL_CONNECTED) { digitalWrite(WifiLED, HIGH); }
+	if (status == WL_CONNECTED) { digitalWrite(WifiLED, HIGH); }	// LED d'état WiFi
 	if (count == 240) {	// replace le compteur "count" à 1 minute.
 		count = 0;
+	} else {
+		count = count + 1;	// et continue le compteur par unité de 250 ms
 	}
 }
