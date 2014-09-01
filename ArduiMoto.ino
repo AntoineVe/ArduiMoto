@@ -27,6 +27,10 @@ const int pinLCD_D5 = 26;
 const int pinLCD_D6 = 24;
 const int pinLCD_D7 = 22;
 
+// Les LED d'état
+int WifiLED = 3;
+
+
 char ssid[] = "*****";	//  SSID
 char pass[] = "*****";	// Mot de passe (WPA)
 int status = WL_IDLE_STATUS;	// the Wifi radio's status
@@ -43,8 +47,11 @@ WiFiUDP Udp;	// Initialise l'UDP
 
 unsigned long timer = 0;	// Le timer (compteur de temps depuis la mise en marche, 
 							// unsigned long permet plus d'un mois de fonctionnement.
-
-int count = 0;	// compteur pour la boucle
+unsigned long timerHBEAT = 0;			// Les différents timer de fonctions
+unsigned long timerTMP36 = 0;
+unsigned long timerDHT11 = 0;
+unsigned long timerLCD = 0;
+unsigned long timerWIFI = 0;
 							
 int TMP36(int capteur) {					// Cette fonction permet le calcul de la
 	int mesure = analogRead(capteur);		// température depuis un capteur TMP36,
@@ -130,8 +137,6 @@ int temperature_dht_now;
 
 int affcount1 = 0;
 
-// Les LED d'état
-int WifiLED = 40;
 
 void setup()
 {
@@ -162,20 +167,29 @@ void setup()
 }
 
 void loop() {
-	if (count % 10 == 0) { // Mesure toutes les secondes la temperature
+	lcd.setCursor(0, 3);
+	lcd.print(millis());
+	lcd.setCursor(10, 3);
+	lcd.print(timerLCD);
+	if (millis() - timerTMP36 > 2000) { // Mesure toutes les 2 secondes la temperature
+		timerTMP36 = millis();
 		Cooling_now = TMP36(CoolingTemp);
 	}
-	if (count % 200 == 0) { // Mesure l'humidité toutes les 30 secondes 
+	if (millis() - timerDHT11 > 10000) { // Interroge le DHT11 toutes les 10 secondes
+		timerDHT11 = millis();
 		humidity_now = dht.readHumidity();
 		temperature_dht_now = dht.readTemperature();
+		
 	}
 //	int packetSize = Udp.parsePacket();  // TODO : action xPL
 //	if(packetSize) {
 //		PacketAction(); // Exécute l'action si demandée
 //	}
 	if ( status == WL_CONNECTED) {		// Uniquement si connecté
-		if (count % 100 == 0) {			// Envoie le HBEAT toutes les 10 secondes
+		if (millis() - timerHBEAT > 10000) {			// Envoie le HBEAT toutes les 10 secondes
+			timerHBEAT = millis();
 			xPL_hbeat();
+			
 //		}
 //		if (Cooling_last != Cooling_now) {		// Envoie le TRIG uniquement si modification
 			xPL_Cooling(Cooling_now);			// comme le prévoie le protocole xPL
@@ -190,9 +204,10 @@ void loop() {
 //			temperature_dht_last = temperature_dht_now;
 		}
 	}
-	if (count % 10 == 0) {
+	if (millis() - timerLCD > 2000) {	// Alterne l'affichage toutes les 2 secondes
+		timerLCD = millis();
 		lcd.clear();
-		if (affcount1 == 0) {		// Alterne l'affichage toutes les 2 secondes
+		if (affcount1 == 0) {		
 			lcd.setCursor(0, 0);
 			lcd.print("Moteur : ");
 			lcd.print(Cooling_now);
@@ -222,18 +237,13 @@ void loop() {
 //		}
 //		rpm = 60*(1000000/rpm_time);
 //		lcd.print(rpm_time);
-		timer = millis();
 	}
-	if (count % 50 == 0) {				// retente la connexion toutes les 5 secondes
+	if (millis() - timerWIFI > 5000) {				// retente la connexion toutes les 5 secondes
+		timerWIFI = millis();
 		if ( status != WL_CONNECTED) {	// si non connecté
 			digitalWrite(WifiLED, LOW);
 			status = WiFi.begin(ssid, pass);
 		}
 	}
-	if (status == WL_CONNECTED) { digitalWrite(WifiLED, HIGH); }	// LED d'état WiFi
-	if (count == 240) {	// replace le compteur "count" à 1 minute.
-		count = 0;
-	} else {
-		count = count + 1;	// et continue le compteur par unité de 250 ms
-	}
+	if (status == WL_CONNECTED) { digitalWrite(WifiLED, HIGH); }	// LED d'état WiFi	
 }
