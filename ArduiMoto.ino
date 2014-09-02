@@ -26,9 +26,10 @@ const int pinLCD_D4 = 28;
 const int pinLCD_D5 = 26;
 const int pinLCD_D6 = 24;
 const int pinLCD_D7 = 22;
+const int pinVbat = A1;
 
 // Les LED d'état
-int WifiLED = 3;
+const int WifiLED = 3;
 
 
 char ssid[] = "*****";	//  SSID
@@ -58,6 +59,11 @@ int TMP36(int capteur) {					// Cette fonction permet le calcul de la
 	float tension = (mesure/1024.0) * 5.0;	// prenant comme argument le pin du capteur
 	int temperature = round((tension - 0.5) * 100);
 	return temperature;
+}
+
+int Vbat(int pin) {
+	int tension = ((analogRead(pin)/1024.0)*15.0)*10;
+	return tension;
 }
 
 void SendUdPMessage(char *buffer) {		// fonction d'envoie à travers le datagram
@@ -143,6 +149,7 @@ void setup()
 	Serial.begin(9600);	// Serial pour le debogage, c'est pratique
 //	Mode des PIN des capteurs
 	pinMode(CoolingTemp, INPUT);
+	pinMode(pinVbat, INPUT);
 	pinMode(WifiLED, OUTPUT);
 //	Wifi.status();
 //	if (WiFi.status() == WL_NO_SHIELD) {
@@ -167,10 +174,6 @@ void setup()
 }
 
 void loop() {
-	lcd.setCursor(0, 3);
-	lcd.print(millis());
-	lcd.setCursor(10, 3);
-	lcd.print(timerLCD);
 	if (millis() - timerTMP36 > 2000) { // Mesure toutes les 2 secondes la temperature
 		timerTMP36 = millis();
 		Cooling_now = TMP36(CoolingTemp);
@@ -207,6 +210,10 @@ void loop() {
 	if (millis() - timerLCD > 2000) {	// Alterne l'affichage toutes les 2 secondes
 		timerLCD = millis();
 		lcd.clear();
+		lcd.setCursor(0, 3);
+		lcd.print("Batt. : ");
+		lcd.print(Vbat(pinVbat)/10.0);
+		lcd.print(" V");
 		if (affcount1 == 0) {		
 			lcd.setCursor(0, 0);
 			lcd.print("Moteur : ");
