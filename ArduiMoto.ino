@@ -1,4 +1,4 @@
-#include <Servo.h>
+//#include <Servo.h>
 #include <DHT.h>
 #include <LiquidCrystal.h>
 #include <SPI.h>
@@ -7,15 +7,14 @@
 #include <stdlib.h>
 
 // Définie le capteur DHT
-#define DHTPIN 2		// Attention, pin < 32 !
+		// Attention, pin < 32 !
 #define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
+#define DHTPIN 2
+DHT dht(DHTPIN, DHTTYPE); // DHT11 (Temperature et humidité)
 
-Servo ctrlralenti;
+//Servo ctrlralenti;
 
-const int CoolingTemp = A0;	// Capteur TMP36
-
-// Définie les pin pour l'écran LCD
+// Définie les pins
 const int pinLCD_RS = 40; 
 const int pinLCD_Enable = 38;
 const int pinLCD_D0 = 36;
@@ -26,7 +25,10 @@ const int pinLCD_D4 = 28;
 const int pinLCD_D5 = 26;
 const int pinLCD_D6 = 24;
 const int pinLCD_D7 = 22;
-const int pinVbat = A1;
+const int CoolingTemp = A0;	// Capteur TMP36
+const int pinVbat = A1;		// Pont diviseur de tension 15V -> 5V
+const int pinVclign = A2;	// Pont diviseur de tension 15V -> 5V aux bornes des clignotants
+const int ClignoRelais = 23;// (Le relais d'origine à cramé, valeur = 42 eur. utilisition d'un relais standars G5V2 et un pont diviseur de tension)
 
 // Les LED d'état
 const int WifiLED = 3;
@@ -53,6 +55,7 @@ unsigned long timerTMP36 = 0;
 unsigned long timerDHT11 = 0;
 unsigned long timerLCD = 0;
 unsigned long timerWIFI = 0;
+unsigned long timerCligno = 0;
 							
 int TMP36(int capteur) {					// Cette fonction permet le calcul de la
 	int mesure = analogRead(capteur);		// température depuis un capteur TMP36,
@@ -141,7 +144,9 @@ int temperature_dht_now;
 //	rpm_time_last = micros();
 //}
 
-int affcount1 = 0;
+int affcount1 = 0; // Compteur pour l'alternance de l'affichage
+int ClignoState = 0; // Etat du clignotant
+int Vclign = 0; // Tension aux diviseur de tension pour le relais du clignotant
 
 
 void setup()
@@ -151,6 +156,9 @@ void setup()
 	pinMode(CoolingTemp, INPUT);
 	pinMode(pinVbat, INPUT);
 	pinMode(WifiLED, OUTPUT);
+	pinMode(pinVclign, INPUT);
+	pinMode(ClignoRelais, OUTPUT);
+	digitalWrite(ClignoRelais, LOW);
 //	Wifi.status();
 //	if (WiFi.status() == WL_NO_SHIELD) {
 //		Serial.println("WiFi shield not present");
@@ -174,6 +182,22 @@ void setup()
 }
 
 void loop() {
+	if (millis() - timerCligno > 706 ) { // D'origine, le clignotant est donné pour 85 cycles par minute (60/85 = 0.706)
+		timerCligno = millis();
+		if (ClignoState == 0) {
+			Vclign = analogRead(pinVclign);
+		}
+		if (Vclign > 300 ) {
+			if (ClignoState == 0) {
+				digitalWrite(ClignoRelais, HIGH);
+				ClignoState = 1;
+			}
+			else {
+				digitalWrite(ClignoRelais, LOW);
+				ClignoState = 0;
+			}
+		}
+	}
 	if (millis() - timerTMP36 > 2000) { // Mesure toutes les 2 secondes la temperature
 		timerTMP36 = millis();
 		Cooling_now = TMP36(CoolingTemp);
