@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <stdlib.h>
+#include <max6675.h>
 
 // Définie le capteur DHT
 		// Attention, pin < 32 !
@@ -29,6 +30,15 @@ const int CoolingTemp = A0;	// Capteur TMP36
 const int pinVbat = A1;		// Pont diviseur de tension 15V -> 5V
 const int pinVclign = A2;	// Pont diviseur de tension 15V -> 5V aux bornes des clignotants
 const int ClignoRelais = 23;// (Le relais d'origine à cramé, valeur = 42 eur. utilisition d'un relais standars G5V2 et un pont diviseur de tension)
+const int pinTC_D0 = 42;
+const int pinTC_CLK = 44;	// Amplificateur pour thermocouple
+const int pinTC_CS = 46;
+const int TMP36_Arduino_vcc = A13;
+const int TMP36_Arduino_data = A14;
+const int TMP36_Arduino_gnd = A15;
+
+MAX6675 thermocouple(pinTC_CLK, pinTC_CS, pinTC_D0);	// Déclaration du thermocouple
+
 
 // Les LED d'état
 const int WifiLED = 3;
@@ -56,10 +66,11 @@ unsigned long timerDHT11 = 0;
 unsigned long timerLCD = 0;
 unsigned long timerWIFI = 0;
 unsigned long timerCligno = 0;
-							
+unsigned long timerThermoC = 0;
+
 int TMP36(int capteur) {					// Cette fonction permet le calcul de la
 	int mesure = analogRead(capteur);		// température depuis un capteur TMP36,
-	float tension = (mesure/1024.0) * 5.0;	// prenant comme argument le pin du capteur
+	float tension = ((mesure * 5.0) / 1024);	// prenant comme argument le pin du capteur
 	int temperature = round((tension - 0.5) * 100);
 	return temperature;
 }
@@ -133,6 +144,10 @@ LiquidCrystal lcd(pinLCD_RS, pinLCD_Enable, pinLCD_D0, pinLCD_D1, pinLCD_D2, pin
 int Cooling_now;
 int humidity_now;
 int temperature_dht_now;
+int temperature_tc_now;
+int temperature_tc_last;
+int Arduino_tmp_now;
+float Vbatterie_now;
 
 //volatile float rpm_time = 0;				//  TODO + FIXME : capteur pour RPM (effet Hall bougie ?)
 //volatile float rpm_time_last = 0;	
@@ -158,7 +173,12 @@ void setup()
 	pinMode(WifiLED, OUTPUT);
 	pinMode(pinVclign, INPUT);
 	pinMode(ClignoRelais, OUTPUT);
+	pinMode(TMP36_Arduino_vcc, OUTPUT);
+	pinMode(TMP36_Arduino_gnd, OUTPUT);
+	pinMode(TMP36_Arduino_vcc, INPUT);
 	digitalWrite(ClignoRelais, LOW);
+	digitalWrite(TMP36_Arduino_vcc, HIGH);
+	digitalWrite(TMP36_Arduino_gnd, LOW);
 //	Wifi.status();
 //	if (WiFi.status() == WL_NO_SHIELD) {
 //		Serial.println("WiFi shield not present");
@@ -182,7 +202,7 @@ void setup()
 }
 
 void loop() {
-	if (millis() - timerCligno > 706 ) { // D'origine, le clignotant est donné pour 85 cycles par minute (60/85 = 0.706)
+	if (millis() - timerCligno > 500 ) { // D'origine, le clignotant est donné pour 85 cycles par minute (60/85 = 0.706), mais je prefere 1/2 seconde
 		timerCligno = millis();
 		if (ClignoState == 0) {
 			Vclign = analogRead(pinVclign);
@@ -198,15 +218,24 @@ void loop() {
 			}
 		}
 	}
-	if (millis() - timerTMP36 > 2000) { // Mesure toutes les 2 secondes la temperature
+	if (millis() - timerTMP36 > 2000) { // Mesure toutes les 2 secondes la temperature et la tension de la batterie
 		timerTMP36 = millis();
 		Cooling_now = TMP36(CoolingTemp);
+		Arduino_tmp_now = TMP36(TMP36_Arduino_data);
+		Vbatterie_now = ((Vbat(pinVbat)/10.0) + 0.1);	// +0.1 car offset de mesure constaté
 	}
 	if (millis() - timerDHT11 > 10000) { // Interroge le DHT11 toutes les 10 secondes
 		timerDHT11 = millis();
 		humidity_now = dht.readHumidity();
 		temperature_dht_now = dht.readTemperature();
 		
+	}
+	if (millis() - timerThermoC > 2000) {
+		temperature_tc_now = round(thermocouple.readCelsius());
+		if (temperature_tc_now == 0) {
+			temperature_tc_now = temperature_tc_last;
+		}
+		temperature_tc_last = temperature_tc_now;
 	}
 //	int packetSize = Udp.parsePacket();  // TODO : action xPL
 //	if(packetSize) {
@@ -234,16 +263,31 @@ void loop() {
 	if (millis() - timerLCD > 2000) {	// Alterne l'affichage toutes les 2 secondes
 		timerLCD = millis();
 		lcd.clear();
-		lcd.setCursor(0, 3);
-		lcd.print("Batt. : ");
-		lcd.print(Vbat(pinVbat)/10.0);
-		lcd.print(" V");
+		if (Vbatterie_now < 12.0) {			// Les valeurs de 12V, 11.5V et 15V sont dans la revue technique de la moto
+			lcd.setCursor(0, 3);
+			lcd.print("Batterie faible");
+		} else if (Vbatterie_now < 11.5) {
+			lcd.setCursor(0, 3);
+			lcd.print("Batterie critique !");
+		} else if (Vbatterie_now > 15) {
+			lcd.setCursor(0, 3);
+			lcd.print("Surcharge batterie !");
+		}
 		if (affcount1 == 0) {		
 			lcd.setCursor(0, 0);
-			lcd.print("Moteur : ");
+			lcd.print("Cooling : ");
 			lcd.print(Cooling_now);
 			lcd.print((char)223);
-			lcd.print("C");;
+			lcd.print("C");
+			lcd.setCursor(0, 1);
+			lcd.print("Echapp. : ");
+			lcd.print(temperature_tc_now + 12); // Offset thermocouple
+			lcd.print((char)223);
+			lcd.print("C");
+			lcd.setCursor(0, 2);
+			lcd.print("Batt. : ");
+			lcd.print(Vbatterie_now);
+			lcd.print(" V");
 			affcount1 = 1;
 		} else {
 			lcd.setCursor(0, 0);
@@ -255,6 +299,11 @@ void loop() {
 			lcd.print("Hum. : ");
 			lcd.print(humidity_now);
 			lcd.print("%");
+			lcd.setCursor(0, 2);
+			lcd.print("Arduino : ");
+			lcd.print(Arduino_tmp_now);
+			lcd.print((char)223);
+			lcd.print("C");
 			affcount1 = 0;
 		}
 //		lcd.print("RPM : ");
@@ -276,5 +325,8 @@ void loop() {
 			status = WiFi.begin(ssid, pass);
 		}
 	}
-	if (status == WL_CONNECTED) { digitalWrite(WifiLED, HIGH); }	// LED d'état WiFi	
+	if (status == WL_CONNECTED) { 
+		digitalWrite(WifiLED, HIGH);
+		Udp.begin(portudp);
+	}	// LED d'état WiFi	
 }
