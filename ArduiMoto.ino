@@ -185,14 +185,14 @@ void setup()
 //		while(true);
 //	}
 //	WiFi.config(ip, ns, gw);
-	if ( status != WL_CONNECTED) { // Essaie de se connecter une première fois au démarrage
-		status = WiFi.begin(ssid, pass);
-		delay(5000);
-	}
-	if ( status == WL_CONNECTED) {
-		Udp.begin(portudp);
-		xPL_hbeat(); // Envoie le premier heartbeat xPL
-	}
+//	if ( status != WL_CONNECTED) { // Essaie de se connecter une première fois au démarrage
+//		status = WiFi.begin(ssid, pass);
+//		delay(5000);
+//	}
+//	if ( status == WL_CONNECTED) {
+//		Udp.begin(portudp);
+//		xPL_hbeat(); // Envoie le premier heartbeat xPL
+//	}
 	
 	lcd.begin(20, 4); // Initialise un écran LCD 16 lignes / 2 colonnes
 	
@@ -318,15 +318,15 @@ void loop() {
 //		rpm = 60*(1000000/rpm_time);
 //		lcd.print(rpm_time);
 	}
-	if (millis() - timerWIFI > 5000) {				// retente la connexion toutes les 5 secondes
-		timerWIFI = millis();
-		if ( status != WL_CONNECTED) {	// si non connecté
-			digitalWrite(WifiLED, LOW);
-			status = WiFi.begin(ssid, pass);
-		}
-	}
-	if (status == WL_CONNECTED) { 
-		digitalWrite(WifiLED, HIGH);
-		Udp.begin(portudp);
-	}	// LED d'état WiFi	
+//	if (millis() - timerWIFI > 5000) {				// retente la connexion toutes les 5 secondes
+//		timerWIFI = millis();
+//		if ( status != WL_CONNECTED) {	// si non connecté
+//			digitalWrite(WifiLED, LOW);
+//			status = WiFi.begin(ssid, pass);
+//		}
+//	}
+//	if (status == WL_CONNECTED) { 
+//		digitalWrite(WifiLED, HIGH);
+//		Udp.begin(portudp);
+//	}	// LED d'état WiFi	
 }
